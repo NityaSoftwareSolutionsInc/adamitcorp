@@ -5,8 +5,8 @@ Company website built with **Next.js** and served behind **Nginx**.
 ## Stack
 
 - Next.js 16 (App Router, standalone output)
-- Bootstrap 5 + Bootstrap Icons + Boxicons
-- Nginx reverse proxy → Node on port `3000`
+- Docker Compose (`web` + nginx on host `:8080`)
+- Host Nginx + Certbot for HTTPS (`adamitcorp.com`)
 
 ## Project structure
 
@@ -18,9 +18,9 @@ src/
 public/
   images/        # logo + hero image
 deploy/
-  nginx.conf           # Nginx config (bare-metal)
-  nginx.docker.conf    # Nginx config (Docker Compose)
-  deploy.sh            # bare-metal build helper
+  deploy.sh            # one-shot production deploy
+  nginx.host.conf      # host Nginx → Docker :8080
+  nginx.docker.conf    # Nginx inside Docker Compose
 Dockerfile
 docker-compose.yml
 ```
@@ -34,74 +34,49 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Docker (recommended)
+## Production deploy (Docker + host Nginx)
 
-Builds Next.js (standalone) and runs Nginx in front on **host port 8080**
-(so it does not clash with other stacks using `:80` / `:3000`).
+On the server (`/opt/adamitcorp`):
+
+```bash
+# First time / every update — rebuild containers
+chmod +x deploy/deploy.sh
+./deploy/deploy.sh
+
+# First time only — install host Nginx site (proxy to :8080)
+./deploy/deploy.sh --nginx
+
+# Check health
+./deploy/deploy.sh --status
+```
+
+Or via npm:
+
+```bash
+npm run deploy
+npm run deploy:nginx
+npm run deploy:status
+```
+
+Stack:
+
+| Layer | Role |
+|-------|------|
+| `adamitcorp-web` | Next.js (`:3010`, internal) |
+| `adamitcorp-nginx` | Docker Nginx → host `:8080` |
+| Host Nginx + Certbot | `:80`/`:443` → `127.0.0.1:8080` |
+
+App URL: https://adamitcorp.com
+
+**Cloudflare:** SSL mode **Full (strict)**. Do not also force `www` in Cloudflare if Nginx already redirects www → apex (avoids redirect loops).
+
+## Docker only (no host Nginx)
 
 ```bash
 docker compose up -d --build
-```
-
-Open [http://localhost:8080](http://localhost:8080).
-
-Useful commands:
-
-```bash
-docker compose logs -f          # follow logs
-docker compose down             # stop
-docker compose up -d --build    # rebuild after code changes
-```
-
-Services:
-
-| Service | Role               | Exposed |
-|---------|--------------------|---------|
-| `web`   | Next.js on `:3010` | internal only |
-| `nginx` | Reverse proxy      | host `:8080` → container `:80` |
-
-## Production (bare metal — Nginx + Next.js)
-
-On the server:
-
-```bash
-npm ci
-npm run build
-npm run start          # listens on port 3000
-# or for standalone:
-# node .next/standalone/server.js
-```
-
-Then install Nginx config:
-
-```bash
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/adamitcorp
-sudo ln -sf /etc/nginx/sites-available/adamitcorp /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-Update `server_name` in `deploy/nginx.conf` to your domain. For HTTPS, use Certbot and uncomment the SSL server block.
-
-### systemd (optional)
-
-```ini
-[Unit]
-Description=Adam IT Corp Next.js
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/var/www/adamitcorp
-ExecStart=/usr/bin/node .next/standalone/server.js
-Restart=always
-Environment=NODE_ENV=production
-Environment=PORT=3000
-Environment=HOSTNAME=127.0.0.1
-
-[Install]
-WantedBy=multi-user.target
+# http://SERVER_IP:8080
 ```
 
 ## Contact form
 
-`POST /api/contact` validates submissions. Wire it to your email provider in `src/app/api/contact/route.ts`.
+`POST /api/contact` validates submissions. Wire email delivery in `src/app/api/contact/route.ts`.
