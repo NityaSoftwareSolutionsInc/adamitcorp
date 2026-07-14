@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Adam IT Corp
 
-## Getting Started
+Company website built with **Next.js** and served behind **Nginx**.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js 16 (App Router, standalone output)
+- Bootstrap 5 + Bootstrap Icons + Boxicons
+- Nginx reverse proxy → Node on port `3000`
+
+## Project structure
+
+```
+src/
+  app/           # pages & API routes
+  components/    # Header, Hero, About, Services, Contact, Footer
+  styles/        # site CSS
+public/
+  images/        # logo + hero image
+deploy/
+  nginx.conf           # Nginx config (bare-metal)
+  nginx.docker.conf    # Nginx config (Docker Compose)
+  deploy.sh            # bare-metal build helper
+Dockerfile
+docker-compose.yml
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local development
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+## Docker (recommended)
 
-To learn more about Next.js, take a look at the following resources:
+Builds Next.js (standalone) and runs Nginx in front on **host port 8080**
+(so it does not clash with other stacks using `:80` / `:3000`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+docker compose up -d --build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:8080](http://localhost:8080).
 
-## Deploy on Vercel
+Useful commands:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+docker compose logs -f          # follow logs
+docker compose down             # stop
+docker compose up -d --build    # rebuild after code changes
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Services:
+
+| Service | Role               | Exposed |
+|---------|--------------------|---------|
+| `web`   | Next.js on `:3010` | internal only |
+| `nginx` | Reverse proxy      | host `:8080` → container `:80` |
+
+## Production (bare metal — Nginx + Next.js)
+
+On the server:
+
+```bash
+npm ci
+npm run build
+npm run start          # listens on port 3000
+# or for standalone:
+# node .next/standalone/server.js
+```
+
+Then install Nginx config:
+
+```bash
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/adamitcorp
+sudo ln -sf /etc/nginx/sites-available/adamitcorp /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Update `server_name` in `deploy/nginx.conf` to your domain. For HTTPS, use Certbot and uncomment the SSL server block.
+
+### systemd (optional)
+
+```ini
+[Unit]
+Description=Adam IT Corp Next.js
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/adamitcorp
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=always
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## Contact form
+
+`POST /api/contact` validates submissions. Wire it to your email provider in `src/app/api/contact/route.ts`.

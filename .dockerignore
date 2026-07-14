@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+_legacy
+deploy/deploy.sh
+.env*
+Dockerfile
+docker-compose*.yml
+.dockerignore
+npm-debug.log*
+.editorconfig
